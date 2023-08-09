@@ -35,7 +35,7 @@ loss = nn.CrossEntropyLoss()  # 损失函数
 optim = torch.optim.SGD(network.parameters(), lr=0.01)  # 例化优化器
 
 # 对每组数据进行20轮学习
-for epoch in range(20):
+for epoch in range(2):
     total_loss = 0
     for data in dataloader:
         imgs, targets = data

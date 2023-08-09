@@ -6,6 +6,9 @@ from torch.utils.tensorboard import SummaryWriter
 from model import cifar10_net
 from torch.utils.data import DataLoader
 
+# 定义运行设备
+device = torch.device("cpu")
+
 # 准备数据集
 train_data = torchvision.datasets.CIFAR10("./dataset", download=True, train=True,
                                           transform=torchvision.transforms.ToTensor())
@@ -26,13 +29,11 @@ test_loader = DataLoader(test_data, batch_size=64)
 
 # 创建网络模型
 model = cifar10_net()
-if torch.cuda.is_available():
-    model = model.cuda()  # 如果可以使用CUDA加速,将模型转移到GPU上
+model.to(device) # 将模型加载到指定设备上
 
 # 创建损失函数
 loss = nn.CrossEntropyLoss()
-if torch.cuda.is_available():
-    loss = loss.cuda()
+loss.to(device)  # 将损失函数加载到指定设备上
 
 # 定义优化器(SGD随机梯度下降)
 optim = torch.optim.SGD(model.parameters(), lr=0.001)
@@ -52,9 +53,8 @@ for i in range(epoch):
     model.train()   # 调整模型为训练状态
     for train_data in train_loader:         # 获取训练数据
         imgs, targets = train_data          # 得到训练数据的标签和特征
-        if torch.cuda.is_available():
-            imgs = imgs.cuda()
-            targets = targets.cuda()
+        imgs = imgs.to(device)
+        targets = targets.to(device)
         out = model(imgs)                   # 模型处理
         loss_res = loss(out, targets)       # 损失函数
         total_loss = total_loss + loss_res  # 累计损失
@@ -74,9 +74,8 @@ for i in range(epoch):
         total_accuracy = 0
         for test_data in test_loader:
             imgs, targets = test_data
-            if torch.cuda.is_available():
-                imgs = imgs.cuda()
-                targets = targets.cuda()
+            imgs = imgs.to(device)
+            targets = targets.to(device)
             output = model(imgs)
             loss_res_test = loss(output, targets)
             total_test_loss = total_test_loss + loss_res_test.item()

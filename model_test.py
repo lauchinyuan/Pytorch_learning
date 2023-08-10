@@ -6,7 +6,7 @@ from torch import nn
 from torch.nn import Sequential, Conv2d, MaxPool2d
 
 # 读取测试图片
-image_path = "./image/horse.jpg"
+image_path = "./image/cat2.jpg"
 img = Image.open(image_path)
 img = img.convert("RGB")
 
@@ -37,7 +37,7 @@ class cifar10_net(nn.Module):
 
 
 # 加载已经训练好的模型
-model = torch.load("model_19.pth", map_location=torch.device("cpu"))
+model = torch.load("model_249.pth", map_location=torch.device("cpu"))
 print(model)
 
 # 将数据输入模型进行处理

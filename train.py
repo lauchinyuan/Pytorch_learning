@@ -48,7 +48,7 @@ total_test_step = 0
 # 添加tensorboard可视化工具
 writer = SummaryWriter("logs")
 # 训练的轮数
-epoch = 10
+epoch = 1000
 for i in range(epoch):
     print("第 {} 轮处理开始".format(i+1))
     total_loss = 0  # 查看每一轮处理后的损失函数数据
@@ -94,7 +94,7 @@ for i in range(epoch):
     total_test_step = total_test_step + 1
 
     # 保存训练好的模型
-    if i == epoch-1:
+    if i % 100 == 0:  # 每100轮训练保存一次
         torch.save(model, "model_{}.pth".format(i))
 
 writer.close()

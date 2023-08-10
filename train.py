@@ -90,7 +90,8 @@ for i in range(epoch):
     writer.add_scalar("test_accuracy", total_accuracy/test_data_size, total_test_step)
     total_test_step = total_test_step + 1
 
-    # 保存训练好的模型(每一轮都保存一次)
-    torch.save(model, "model_{}.pth".format(i))
+    # 保存训练好的模型
+    if i == epoch-1:
+        torch.save(model, "model_{}.pth".format(i))
 
 writer.close()

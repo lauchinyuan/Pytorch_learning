@@ -25,10 +25,10 @@ test_loader = DataLoader(test_data, batch_size=64)
 
 
 # 创建网络模型
-# model = cifar10_net()
+model = cifar10_net()
 
 # 或者导入已经部分训练过的模型
-model = torch.load("model_249.pth",map_location=torch.device("cpu"))
+# model = torch.load("model_249.pth",map_location=torch.device("cpu"))
 if torch.cuda.is_available():
     model = model.cuda()  # 如果可以使用CUDA加速,将模型转移到GPU上
 

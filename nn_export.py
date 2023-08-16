@@ -75,6 +75,8 @@ for name, param in model.named_parameters():
         i = i + 1
     # 文件写入
     np.savetxt("{}.txt".format(name), param_int, fmt="%02x")  # 保存np数组到txt文件,从FPGA中读取即可
+    np.savetxt("{}_d.txt".format(name), param_int, fmt="%d")  # 以整数形式保存,方便np.loadtxt()调用
+
 
 
 #     # 寻找权重中的最大值, 确定量化方案

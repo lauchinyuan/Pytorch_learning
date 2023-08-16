@@ -39,7 +39,8 @@ class NNConv2d:
                     # 一个多通道卷积窗口计算完成,将卷积值加上偏置保存到ofm(输出特征图)
                     ofm[oc * self.out_size_w * self.out_size_h + (oh * self.out_size_w) + ow] = sum_conv + bias[oc]
         # 卷积计算完成, 写入文件
-        np.savetxt("{}.txt".format(self.name), ofm, fmt="%d")
+        np.savetxt("{}.txt".format(self.name), ofm, fmt="%02x")
+        np.savetxt("{}_d.txt".format(self.name), ofm, fmt="%d")
 
 
 # 定义最大池化类
@@ -75,6 +76,7 @@ class NNMaxPool2d:
                     # 一个窗口寻找完成,保存结果
                     ofm[ic * self.out_size_h * self.out_size_w + oh * self.out_size_w + ow] = win_max
         np.savetxt("{}.txt".format(self.name), ofm, fmt="%02x")
+        np.savetxt("{}_d.txt".format(self.name), ofm, fmt="%d")
 
 
 class NNLinear:
@@ -93,4 +95,37 @@ class NNLinear:
                 linear_sum = linear_sum + weight[oc * self.in_channel + ic] * img[ic]
             # 累加完成,加上偏置并保存到ofm
             ofm[oc] = linear_sum + bias[oc]
-        np.savetxt("{}.txt".format(self.name), ofm, fmt="%d")
+        np.savetxt("{}.txt".format(self.name), ofm, fmt="%02x")
+        np.savetxt("{}_d.txt".format(self.name), ofm, fmt="%d")
+
+
+# padding填充
+class NNPadding2d:
+    def __init__(self, in_size_w, in_size_h, in_channel, padding_w, padding_h, name):
+        self.in_size_w = in_size_w
+        self.in_size_h = in_size_h
+        self.in_channel = in_channel
+        self.padding_w = padding_w
+        self.padding_h = padding_h
+        self.name = name
+        # 衍生参数计算
+        self.out_size_w = int(in_size_w + 2 * padding_w)  # 输出特征图宽度
+        self.out_size_h = int(in_size_h + 2 * padding_h)  # 输出特征图高度
+        self.out_channel = in_channel
+
+    def padding(self, img):
+        # 开辟输出特征图空间
+        ofm = torch.zeros((self.out_size_w * self.out_size_h * self.out_channel), 1)
+        ofm = ofm.numpy().astype(int)
+        for oc in range(self.out_channel):  # 遍历输出通道
+            for oh in range(self.out_size_h):  # 遍历输出特征图的行
+                for ow in range(self.out_size_w):  # 遍历输出特征图的行内数据(列)
+                    if (oh <= self.padding_h - 1) or (oh >= self.in_size_h + self.padding_h) or \
+                            (ow <= self.padding_w - 1) or (ow >= self.in_size_w + self.padding_w):
+                        ofm[oc * self.out_size_h * self.out_size_w + oh * self.out_size_w + ow] = 0
+                    else:
+                        ofm[oc * self.out_size_h * self.out_size_w + oh * self.out_size_w + ow] = \
+                                img[oc * self.in_size_h * self.in_size_w +
+                                (oh - self.padding_h) * self.in_size_w + (ow - self.padding_w)]
+        np.savetxt("{}.txt".format(self.name), ofm, fmt="%x")
+        np.savetxt("{}_d.txt".format(self.name), ofm, fmt="%d")

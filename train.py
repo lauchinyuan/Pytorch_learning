@@ -25,6 +25,7 @@ test_loader = DataLoader(test_data, batch_size=64)
 
 
 # 创建网络模型
+# 由于采用的是训练后静态量化方案,因此暂时无需例化插入量化节点的模型
 model = cifar10_net()
 
 # 或者导入已经部分训练过的模型
@@ -95,7 +96,7 @@ for i in range(epoch):
 
     # 保存训练好的模型
     if i % 100 == 0:  # 每100轮训练保存一次
-        torch.save(model, "model_{}.pth".format(i))  # 保存结构和参数
-        torch.save(model.state_dict(), "model_dict_{}.pth".format(i))  # 保存成字典
+        torch.save(model, "./model_pth/model_{}.pth".format(i))  # 保存结构和参数
+        torch.save(model.state_dict(), "./model_pth/model_dict_{}.pth".format(i))  # 保存成字典
 
 writer.close()

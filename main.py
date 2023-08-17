@@ -27,8 +27,11 @@ class M(torch.nn.Module):
         x = self.dequant(x)
         return x
 
+
 # create a model instance
 model_fp32 = M()
+model_fp32.load_state_dict(torch.load("test.pth"))
+print(model_fp32)
 
 # model must be set to eval mode for static quantization logic to work
 model_fp32.eval()
@@ -46,15 +49,16 @@ model_fp32.qconfig = torch.quantization.get_default_qconfig('x86')
 # Fuse the activations to preceding layers, where applicable.
 # This needs to be done manually depending on the model architecture.
 # Common fusions include `conv + relu` and `conv + batchnorm + relu`
-model_fp32_fused = torch.quantization.fuse_modules(model_fp32, [['conv', 'relu']])
+# model_fp32_fused = torch.quantization.fuse_modules(model_fp32, [['conv', 'relu']])
 
 # Prepare the model for static quantization. This inserts observers in
 # the model that will observe activation tensors during calibration.
-model_fp32_prepared = torch.quantization.prepare(model_fp32_fused)
+model_fp32_prepared = torch.quantization.prepare(model_fp32)
 
 # calibrate the prepared model to determine quantization parameters for activations
 # in a real world setting, the calibration would be done with a representative dataset
-input_fp32 = torch.randn(4, 1, 4, 4)
+input_fp32 = torch.range(0, 63, dtype=torch.float32)
+input_fp32 = torch.reshape(input_fp32, (4, 1, 4, 4))
 model_fp32_prepared(input_fp32)
 
 # Convert the observed model to a quantized model. This does several things:
@@ -65,6 +69,7 @@ model_int8 = torch.quantization.convert(model_fp32_prepared)
 
 # run the model, relevant calculations will happen in int8
 res = model_int8(input_fp32)
+print(res)
 
 
 

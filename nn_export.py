@@ -78,7 +78,6 @@ for name, param in model.named_parameters():
     np.savetxt("{}_d.txt".format(name), param_int, fmt="%d")  # 以整数形式保存,方便np.loadtxt()调用
 
 
-
 #     # 寻找权重中的最大值, 确定量化方案
 #     if torch.max(param) > max_param:
 #         max_param = torch.max(param)

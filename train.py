@@ -95,6 +95,7 @@ for i in range(epoch):
 
     # 保存训练好的模型
     if i % 100 == 0:  # 每100轮训练保存一次
-        torch.save(model, "model_{}.pth".format(i))
+        torch.save(model, "model_{}.pth".format(i))  # 保存结构和参数
+        torch.save(model.state_dict(), "model_dict_{}.pth".format(i))  # 保存成字典
 
 writer.close()

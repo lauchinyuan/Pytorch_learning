@@ -1,3 +1,5 @@
+import time
+
 import torch
 import torchvision
 from torch import nn
@@ -10,7 +12,7 @@ from torch.utils.data import DataLoader
 train_data = torchvision.datasets.CIFAR10("./dataset", download=True, train=True,
                                           transform=torchvision.transforms.ToTensor())
 
-test_data = torchvision.datasets.CIFAR10("./dataset", download=False, train=True,
+test_data = torchvision.datasets.CIFAR10("./dataset", download=False, train=False,
                                           transform=torchvision.transforms.ToTensor())
 
 # 查看数据大小
@@ -26,10 +28,10 @@ test_loader = DataLoader(test_data, batch_size=64)
 
 # 创建网络模型
 # 由于采用的是训练后静态量化方案,因此暂时无需例化插入量化节点的模型
-model = cifar10_net()
+# model = cifar10_net()
 
 # 或者导入已经部分训练过的模型
-# model = torch.load("model_249.pth",map_location=torch.device("cpu"))
+model = torch.load("./model_pth/model_900.pth", map_location=torch.device("cpu"))
 if torch.cuda.is_available():
     model = model.cuda()  # 如果可以使用CUDA加速,将模型转移到GPU上
 
@@ -49,7 +51,8 @@ total_test_step = 0
 # 添加tensorboard可视化工具
 writer = SummaryWriter("logs")
 # 训练的轮数
-epoch = 1000
+epoch = 2500
+start_clk = time.time()  # 程序时间统计,计数开始
 for i in range(epoch):
     print("第 {} 轮处理开始".format(i+1))
     total_loss = 0  # 查看每一轮处理后的损失函数数据
@@ -98,5 +101,11 @@ for i in range(epoch):
     if i % 100 == 0:  # 每100轮训练保存一次
         torch.save(model, "./model_pth/model_{}.pth".format(i))  # 保存结构和参数
         torch.save(model.state_dict(), "./model_pth/model_dict_{}.pth".format(i))  # 保存成字典
+
+    # 每个epoch统计一次时间, 为了效率可以注释掉
+    end_clk = time.time()
+    runtime = end_clk - start_clk
+    runtime = time.strftime("%H:%M:%S", time.gmtime(runtime))
+    print("训练测试已运行时长:{}".format(runtime))
 
 writer.close()

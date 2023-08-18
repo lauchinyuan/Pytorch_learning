@@ -16,7 +16,8 @@ model_int8.load_state_dict(state_dict)
 
 # 量化后模型参数导出
 for key in state_dict:
-    if "weight" in key:  # 提取量化后权重到txt文件,文件保存为1列
+    # print(key)
+    if "weight" in key:  # 提取量化后权重到txt文件,文件保存为1列,
         weight_int = state_dict[key].int_repr()  # 提取整数表达
         # print(key)
         # print(weight_int)
@@ -26,11 +27,33 @@ for key in state_dict:
         weight_int_np = weight_int.numpy().astype("uint8")
         np.savetxt("./txt/{}_qint8.txt".format(key), weight_int_np, fmt="%02x")
 
-    # 获取量化参数 Zero_point & scale
+    # 获取量化参数 Zero_point & scale, 参数量小, print记录即可
     if "scale" in key:
         print("{}:{}".format(key, state_dict[key]))
     if "zero_point" in key:
         print("{}:{}".format(key, state_dict[key]))
+
+    # bias依然是float32类型的,但在实际计算时会转换为int32类型
+    if "bias" in key:
+        print("{}:{}".format(key, state_dict[key]))
+
+    # 某些层的模型参数需要解压缩才能查看
+    if ("_packed_params" in key) and ("dtype" not in key):
+        w, b = state_dict[key]
+        # print("shape of weights: {}".format(w.shape))
+        # print("shape of bias: {}".format(b.shape))
+        # print("type of weights: {}".format(w.dtype))
+        # print("type of bias: {}".format(b.dtype))
+
+        # 对权重进行处理, 保存为1列txt
+        weight_int = torch.reshape(w.int_repr(), (-1, 1))
+        weight_int_np = weight_int.numpy().astype("uint8")
+        # print(weight_int_np)
+        np.savetxt("./txt/" + key.replace("_packed_params._packed_params", "") + "weight_qint8.txt",
+                   weight_int_np, fmt="%02x")
+
+
+
 
 
 
@@ -56,3 +79,25 @@ for key in state_dict:
 # quant.zero_point:tensor([0])
 
 
+# conv1.weight
+# conv1.bias
+# conv1.scale
+# conv1.zero_point
+# conv2.weight
+# conv2.bias
+# conv2.scale
+# conv2.zero_point
+# conv3.weight
+# conv3.bias
+# conv3.scale
+# conv3.zero_point
+# linear1.scale
+# linear1.zero_point
+# linear1._packed_params.dtype
+# linear1._packed_params._packed_params
+# linear2.scale
+# linear2.zero_point
+# linear2._packed_params.dtype
+# linear2._packed_params._packed_params
+# quant.scale
+# quant.zero_poin

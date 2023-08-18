@@ -13,7 +13,8 @@ test_data = torchvision.datasets.CIFAR10("./dataset", train=False, download=True
 test_loader = DataLoader(test_data, batch_size=64)
 
 # 加载已经训练好的float32模型,此时需要将模型的输入输出端插入量化、反量化节点
-dict_path = "./model_pth/model_dict_10.pth"
+dict_path = "./model_pth/model_dict_900.pth"
+fp32_pth_path = "./model_pth/model_900.pth"
 model_32fp_q = cifar10_net(is_quant=True)
 state_dict = torch.load(dict_path)
 model_32fp_q.load_state_dict(state_dict)
@@ -43,8 +44,9 @@ torch.save(model_int8.state_dict(), "./model_pth/model_int8.pth")
 
 # 量化后模型准确性测试, 并与未量化的模型进行对比
 # 加载没有插入量化节点的同等参数的浮点模型
-model_fp32 = cifar10_net(is_quant=False)
-model_fp32.load_state_dict(state_dict)
+# model_fp32 = cifar10_net(is_quant=False)
+# model_fp32.load_state_dict(state_dict)
+model_fp32 = torch.load(fp32_pth_path, map_location=torch.device("cpu"))
 
 # 模式转换
 model_int8.eval()

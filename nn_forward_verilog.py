@@ -5,10 +5,10 @@ import numpy as np
 import torch
 from torch import nn, functional
 from torch.nn import Conv2d
+from torch.utils.tensorboard import SummaryWriter
 
 from model import cifar10_net
 from torch.nn.quantized import Conv2d as QConv2d
-
 
 # 量化后模型的加载, 需要与量化过程中保持一致的处理
 model_fp32 = cifar10_net(is_quant=True)
@@ -22,7 +22,7 @@ model_int8.load_state_dict(state_dict)
 model_fp32 = torch.load("./model_pth/model_900.pth")
 
 # 给定一个小的测试数据
-x = torch.arange(0, 3*32*32).reshape((1, 3, 32, 32))
+x = torch.arange(0, 3 * 32 * 32).reshape((1, 3, 32, 32))
 x = x.type(torch.FloatTensor)
 x = x * 0.00001
 # print("x: {}".format(x))
@@ -52,7 +52,6 @@ flatten_res = model_int8.flatten_res  # scale=1.0444879531860352, zero_point=62
 linear1_res = model_int8.linear1_res  # scale=0.4158819019794464, zero_point=67
 linear2_res = model_int8.linear2_res  # scale=2.0874075889587402, zero_point=52, torch.quint8
 dequant_res = model_int8.dequant_res
-
 
 # fp32模型的中间结果
 fp32_conv1_res = model_fp32.conv1_res
@@ -88,39 +87,9 @@ for key in state_dict:
     if "conv1.weight" in key:  # 提取量化后权重到txt文件,文件保存为1列,
         weight_int = state_dict[key]  # int8 ([32, 3, 5, 5])
     if "conv1.bias" in key:
-        bias_fp32 = state_dict[key]  #float32 torch.Size([32])
+        bias_fp32 = state_dict[key]  # float32 torch.Size([32])
 
-# # 使用量化的卷积op尝试对量化后的参数进行卷积运算, 结果一致
-# net = QConv2d(in_channels=3, out_channels=32, kernel_size=5, padding=2)
-# s_dict = {"bias": bias_fp32, "weight": weight_int, "scale": 0.11349091678857803, "zero_point": 75}
-# net.load_state_dict(s_dict)
-# conv_res = net(quant_res)
-# print("_______________________net____________________")
-# print(conv_res)
-# print("_______________________conv____________________")
-# print(conv1_res)
-
-# 对量化后的整数数据减去其量化零点, 再卷积, 并进行scale调整, 结果与量化后一致
-in_int = quant_res.int_repr()
-weight_int = weight_int.int_repr()
-bias_int = torch.quantize_per_tensor(bias_fp32, zero_point=0, scale=0.004655691795051098*0.007874015718698502,
-                                     dtype=torch.qint32).int_repr()
-net = Conv2d(in_channels=3, out_channels=32, kernel_size=5, padding=2)
-net.weight.data = weight_int.to(torch.float32)
-net.bias.data = bias_int.to(torch.float32)
-net_out = net(in_int.to(torch.float32))
-M = 0.004655691795051098*0.007874015718698502/0.11349091678857803
-net_q = np.round((M * net_out + 75).detach()).to(torch.uint8)
-print("_______________________net____________________")
-print(net_q)
-print("_______________________conv____________________")
-conv1_res_int = conv1_res.int_repr()
-print(conv1_res.int_repr())
-error = (conv1_res_int - net_q).sum()
-print(error)
-
-
-# 将数据再次转换为浮点数来进行卷积,则卷积后的结果与未量化模型保持一致
+# 将定点转换为浮点数来进行卷积,则卷积后的结果与未量化模型保持一致
 # weight_int_dequant = weight_int.dequantize()
 # print(weight_int_dequant)
 # print(x_q_dq)
@@ -137,6 +106,88 @@ print(error)
 #
 # error = (conv1_res.int_repr() - net_out.int_repr()).sum()
 # print(error)
+
+# # 使用量化的卷积op尝试对量化后的参数进行卷积运算, 结果一致
+# net = QConv2d(in_channels=3, out_channels=32, kernel_size=5, padding=2)
+# s_dict = {"bias": bias_fp32, "weight": weight_int, "scale": 0.11349091678857803, "zero_point": 75}
+# net.load_state_dict(s_dict)
+# conv_res = net(quant_res)
+# print("_______________________net____________________")
+# print(conv_res)
+# print("_______________________conv____________________")
+# print(conv1_res)
+
+# 对量化后的整数数据减去其量化零点, 再卷积, 并进行scale调整, 结果与量化后一致
+# in_int = quant_res.int_repr()
+# weight_int = weight_int.int_repr()
+# bias_int = torch.quantize_per_tensor(bias_fp32, zero_point=0, scale=0.004655691795051098 * 0.007874015718698502,
+#                                      dtype=torch.qint32).int_repr()
+# print(bias_int)
+# net = Conv2d(in_channels=3, out_channels=32, kernel_size=5, padding=2)
+# net.weight.data = weight_int.to(torch.float32)
+# net.bias.data = bias_int.to(torch.float32)
+# net_out = net(in_int.to(torch.float32))
+# M = 0.004655691795051098*0.007874015718698502/0.11349091678857803
+# net_q = np.round((M * net_out + 75).detach()).to(torch.uint8)
+# print("_______________________net____________________")
+# print(net_q)
+# print("_______________________conv____________________")
+# conv1_res_int = conv1_res.int_repr()
+# print(conv1_res.int_repr())
+# error = (conv1_res_int != net_q).sum()
+# print(error)
+
+
+# 探究不同scale量化位宽的影响, 经过测试, scale小数位为63位时可以实现零误差计算
+# 但硬件开销过于大,因此选择16bit小数位+0位整数位作为scale因子的定点量化方案
+s1 = 0.007874015718698502
+s2 = 0.004655691795051098
+s3 = 0.113490916788578031412
+M = s1*s2/s3
+print(M)
+# writer = SummaryWriter("logs")
+# step = 0
+# for n in range(64):
+#     M_int = round(M * 2**n)
+#     M0 = M_int * (2**(-n))
+#     error = abs(M0 - M)
+#     writer.add_scalar("error", error, step)
+#     writer.add_scalar("fixed vs. float", M, step)
+#     writer.add_scalar("fixed vs. float", M0, step)
+#     print(error)
+#     print("n: {}, error:{}".format(n, (error/M)*100))
+#     step = step + 1
+# writer.close()
+
+
+# 实际的scale量化方案下的卷积过程模拟
+# in_int = quant_res.int_repr()
+# weight_int = weight_int.int_repr()
+# bias_int = torch.quantize_per_tensor(bias_fp32, zero_point=0, scale=0.004655691795051098 * 0.007874015718698502,
+#                                      dtype=torch.qint32).int_repr()
+# net = Conv2d(in_channels=3, out_channels=32, kernel_size=5, padding=2)
+# net.weight.data = weight_int.to(torch.float32)
+# net.bias.data = bias_int.to(torch.float32)
+# net_out = net(in_int.to(torch.float32))
+# s1 = 0.007874015718698502
+# s2 = 0.004655691795051098
+# s3 = 0.11349091678857803
+# M = s1 * s2 / s3
+# n = 16  # 量化小数位数
+# M_fix = int(M * 2 ** n)
+# M0 = M_fix * 2**(-n)  # 量化后实际表示的scale值
+# net_q = (((M_fix * net_out).to(torch.int64) >> n) + 75).to(torch.uint8)
+# # net_q = np.round((M * net_out + 75).detach()).to(torch.uint8)
+# print("_______________________net____________________")
+# print(net_q)
+# print("_______________________conv____________________")
+# conv1_res_int = conv1_res.int_repr()
+# print(conv1_res.int_repr())
+# error = (conv1_res_int != net_q).sum()
+# print("n: {}, error: {}, error rate:{}".format(n, error, error / (32 * 32 * 32)))
+
+
+
 
 
 # 数据类型

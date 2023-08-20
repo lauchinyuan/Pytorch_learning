@@ -69,6 +69,5 @@ with torch.no_grad():
 # 结果分析
 print("量化模型预测正确率为: {}".format(total_accuracy_int8/total_test_size))
 print("浮点模型测正确率为: {}".format(total_accuracy_fp32/total_test_size))
-
-
+print(model_int8)
 

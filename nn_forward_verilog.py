@@ -1,107 +1,185 @@
 # 使用经过定点化后的模型参数构建神经网络前向路径
 # 作为Verilog/FPGA/ASIC计算结果的参考
-# 与pytorch自带的模型算子不同之处在于,本工程模型算子并不直接返回结果,而是将其保存在文件中
-# 模型算子的输入均是1列经过定点量化后的numpy array(按照宽、高、通道的顺序排列)
-# 这一过程亦可在MATLAB中进行
-import PIL.Image
+# 这一过程亦可在MATLAB中进行,但MATLAB不方便进行量化模型的模拟
 import numpy as np
 import torch
-import torchvision
-from numpy import size
+from torch import nn, functional
+from torch.nn import Conv2d
 
-# 导入自定义的算子
-from nn_basic import NNConv2d, NNLinear, NNMaxPool2d, NNPadding2d
-
-
-# 网络结构
-# cifar10_net(
-#   (net): Sequential(
-#     (0): Conv2d(3, 32, kernel_size=(5, 5), stride=(1, 1), padding=(2, 2))
-#     (1): MaxPool2d(kernel_size=2, stride=2, padding=0, dilation=1, ceil_mode=False)
-#     (2): Conv2d(32, 32, kernel_size=(5, 5), stride=(1, 1), padding=(2, 2))
-#     (3): MaxPool2d(kernel_size=2, stride=2, padding=0, dilation=1, ceil_mode=False)
-#     (4): Conv2d(32, 64, kernel_size=(5, 5), stride=(1, 1), padding=(2, 2))
-#     (5): MaxPool2d(kernel_size=2, stride=2, padding=0, dilation=1, ceil_mode=False)
-#     (6): Flatten(start_dim=1, end_dim=-1)
-#     (7): Linear(in_features=1024, out_features=64, bias=True)
-#     (8): Linear(in_features=64, out_features=10, bias=True)
-#   )
-# )
+from model import cifar10_net
+from torch.nn.quantized import Conv2d as QConv2d
 
 
+# 量化后模型的加载, 需要与量化过程中保持一致的处理
+model_fp32 = cifar10_net(is_quant=True)
+state_dict = torch.load("./model_pth/model_int8.pth")
+model_fp32.qconfig = torch.quantization.get_default_qconfig('x86')
+load_model_prepared = torch.quantization.prepare(model_fp32)
+model_int8 = torch.quantization.convert(load_model_prepared)
+model_int8.load_state_dict(state_dict)
+
+# 浮点模型加载, 作为对照
+model_fp32 = torch.load("./model_pth/model_900.pth")
+
+# 给定一个小的测试数据
+x = torch.arange(0, 3*32*32).reshape((1, 3, 32, 32))
+x = x.type(torch.FloatTensor)
+x = x * 0.00001
+# print("x: {}".format(x))
+
+# 给模型一个输入
+model_int8(x)
+
+x_q = torch.quantize_per_tensor(x, zero_point=0, scale=0.007874015718698502, dtype=torch.quint8)
+x_q_dq = x_q.dequantize()
+model_fp32(x_q_dq)
+
+# 得到模型处理的中间结果
+# for key, value in model_int8.__dict__.items():
+#     # if "quant_res" in key:  # 中间结果均含有res关键词
+#     # if key == "quant_res":
+#     #     print(key, value.int_repr())
+
+quant_res = model_int8.quant_res  # scale=0.007874015718698502, zp=0
+# conv1_weight: scale=0.004655691795051098, zero_point=0
+conv1_res = model_int8.conv1_res  # scale=0.11349091678857803,zero_point=75
+maxpool1_res = model_int8.maxpool1_res  # scale=0.11349091678857803, zero_point=75
+conv2_res = model_int8.conv2_res  # scale=0.6031823754310608,zero_point=68
+maxpool2_res = model_int8.maxpool2_res  # scale=0.6031823754310608, zero_point=68
+conv3_res = model_int8.conv3_res  # scale=1.0444879531860352,zero_point=62
+maxpool3_res = model_int8.maxpool3_res  # scale=1.0444879531860352, zero_point=62
+flatten_res = model_int8.flatten_res  # scale=1.0444879531860352, zero_point=62
+linear1_res = model_int8.linear1_res  # scale=0.4158819019794464, zero_point=67
+linear2_res = model_int8.linear2_res  # scale=2.0874075889587402, zero_point=52, torch.quint8
+dequant_res = model_int8.dequant_res
 
 
-# # (0): Conv2d
-# # 从txt文件中读取三通道卷积核(8bit量化已完成)
-# kernel_1 = np.loadtxt("net.0.weight_d.txt", dtype=np.int8)  # 工程中量化后的权重和偏置都使用8bit有符号数
-# # 读取bias
-# bias_1 = np.loadtxt("net.0.bias_d.txt", dtype=np.int8)
-# # # 三通道输入特征图
-# # img = PIL.Image.open("val/airplane/3.png")
+# fp32模型的中间结果
+fp32_conv1_res = model_fp32.conv1_res
+fp32_maxpool1_res = model_fp32.maxpool1_res
+fp32_conv2_res = model_fp32.conv2_res
+fp32_maxpool2_res = model_fp32.maxpool2_res
+fp32_conv3_res = model_fp32.conv3_res
+fp32_maxpool3_res = model_fp32.maxpool3_res
+fp32_flatten_res = model_fp32.flatten_res
+fp32_linear1_res = model_fp32.linear1_res
+fp32_linear2_res = model_fp32.linear2_res
+
+# 中间结果打印
+# print("quant_res: {}".format(quant_res))
+# print("conv1_res: {}".format(conv1_res))
+# print("maxpool1_res: {}".format(maxpool1_res))
+# print("conv2_res: {}".format(conv2_res))
+# print("maxpool2_res: {}".format(maxpool2_res))
+# print("conv3_res: {}".format(conv3_res))
+# print("maxpool3_res: {}".format(maxpool3_res))
+# print("flatten_res: {}".format(flatten_res))
+# print("linear1_res: {}".format(linear1_res))
+# print("linear2_res: {}".format(linear2_res))
+# print("dequant_res: {}".format(dequant_res))
+
+
+# 模拟量化模型的整数卷积过程
+# 参数获取
+weight_int = 0
+bias_fp32 = 0
+for key in state_dict:
+    # print(key)
+    if "conv1.weight" in key:  # 提取量化后权重到txt文件,文件保存为1列,
+        weight_int = state_dict[key]  # int8 ([32, 3, 5, 5])
+    if "conv1.bias" in key:
+        bias_fp32 = state_dict[key]  #float32 torch.Size([32])
+
+# # 使用量化的卷积op尝试对量化后的参数进行卷积运算, 结果一致
+# net = QConv2d(in_channels=3, out_channels=32, kernel_size=5, padding=2)
+# s_dict = {"bias": bias_fp32, "weight": weight_int, "scale": 0.11349091678857803, "zero_point": 75}
+# net.load_state_dict(s_dict)
+# conv_res = net(quant_res)
+# print("_______________________net____________________")
+# print(conv_res)
+# print("_______________________conv____________________")
+# print(conv1_res)
+
+# 对量化后的整数数据减去其量化零点, 再卷积, 并进行scale调整, 结果与量化后一致
+in_int = quant_res.int_repr()
+weight_int = weight_int.int_repr()
+bias_int = torch.quantize_per_tensor(bias_fp32, zero_point=0, scale=0.004655691795051098*0.007874015718698502,
+                                     dtype=torch.qint32).int_repr()
+net = Conv2d(in_channels=3, out_channels=32, kernel_size=5, padding=2)
+net.weight.data = weight_int.to(torch.float32)
+net.bias.data = bias_int.to(torch.float32)
+net_out = net(in_int.to(torch.float32))
+M = 0.004655691795051098*0.007874015718698502/0.11349091678857803
+net_q = np.round((M * net_out + 75).detach()).to(torch.uint8)
+print("_______________________net____________________")
+print(net_q)
+print("_______________________conv____________________")
+conv1_res_int = conv1_res.int_repr()
+print(conv1_res.int_repr())
+error = (conv1_res_int - net_q).sum()
+print(error)
+
+
+# 将数据再次转换为浮点数来进行卷积,则卷积后的结果与未量化模型保持一致
+# weight_int_dequant = weight_int.dequantize()
+# print(weight_int_dequant)
+# print(x_q_dq)
+# net = Conv2d(in_channels=3, out_channels=32, padding=2,  kernel_size=5)
+# net.weight.data = weight_int_dequant
+# net.bias.data = bias_fp32
+# net_out = net(x_q_dq)
+# net_out = torch.quantize_per_tensor(net_out, scale=0.11349091678857803, zero_point=75, dtype=torch.quint8)
+# # net_out = net_out.dequantize()
+# print("_______________________net____________________")
+# print(net_out)
+# print("_______________________conv____________________")
+# print(conv1_res)
 #
-# img_1 = torch.arange(0, 32 * 32 * 3)
-# img_1 = torch.reshape(img_1, (-1, 1))
-# img_1 = img_1.numpy()
-#
-# # 第一层卷积
-# NNConv2d_1 = NNConv2d(name="NNConv2d_1", kernel_size_w=5, kernel_size_h=5, in_size_w=32, in_size_h=32,
-#                       stride_h=1, stride_w=1, in_channel=3, out_channel=32)
-# NNConv2d_1.conv_2d(kernel=kernel_1, img=img_1, bias=bias_1)
-#
-# # 读取卷积计算结果,并进行池化
-# img_2 = np.loadtxt("NNConv2d_1_d.txt", dtype=np.int16)
-#
-# # 池化
-# # img_2 = torch.arange(1, 28 * 28 * 64 + 1)  # 用作测试的img_2
-# # img_2 = torch.reshape(img_2, (-1, 1))  # 默认的数据组织格式为1列的
-# # img_2 = img_2.numpy()  # 转为numpy array
-# # 池化类
-# NNMaxPool2d_1 = NNMaxPool2d(in_channel=32, kernel_size=2, in_size_h=28, in_size_w=28, stride=2, name="NNMaxPool2d_1")
-# NNMaxPool2d_1.maxpool2d(img=img_2)
-#
-# # 读取池化结果
-# img_3 = np.loadtxt("NNMaxPool2d_1_d.txt", dtype=np.int16)
-
-# # 线性化
-# img = torch.arange(1, 1024 + 1)  # 用作测试的img_2
-# img = torch.reshape(img, (-1, 1))  # 默认的数据组织格式为1列的
-# img = img.numpy()  # 转为numpy array
-#
-# weight = torch.arange(0, 1024 * 64)
-# weight = torch.reshape(weight, (-1, 1))
-# weight = weight.numpy()
-#
-# bias = torch.arange(0, 64)
-# bias = torch.reshape(bias, (-1, 1))
-# bias = bias.numpy()
-#
-# # 例化线性类
-# NNLinear_1 = NNLinear(in_channel=1024, out_channel=64, name="NNLinear_1")
-# NNLinear_1.linear(img=img, weight=weight, bias=bias)
-#
+# error = (conv1_res.int_repr() - net_out.int_repr()).sum()
+# print(error)
 
 
+# 数据类型
+# zero_point: int64
+# scale: float32
+# weight: qint8
+# bias: float32
+
+# 量化数据
+# quant.scale:tensor([0.0079])
+# quant.zero_point:tensor([0])
+# conv1.scale:0.11349091678857803
+# conv1.zero_point:75
+# conv2.scale:0.6031823754310608
+# conv2.zero_point:68
+# conv3.scale:1.0444879531860352
+# conv3.zero_point:62
+# linear1.scale:0.4158819019794464
+# linear1.zero_point:67
+# linear2.scale:2.0874075889587402
+# linear2.zero_point:52
 
 
-
-
-
-# 三通道输入特征图
-img = PIL.Image.open("./dataset/val/airplane/90.png")
-trans = torchvision.transforms.ToTensor()
-img = trans(img)
-img_2 = torch.round(img * 2**7)
-img = torch.reshape(img, (-1, 1)).numpy()
-img_2 = torch.reshape(img_2, (-1, 1)).numpy()
-np.savetxt("img.txt", img)
-np.savetxt("img_2.txt", img_2, fmt="%d")
-
-# NNPadding2d_1 = NNPadding2d(in_size_w=32, in_size_h=32, in_channel=3, padding_h=2, padding_w=2, name="NNPadding2d")
-# NNPadding2d_1.padding(img)
-
-
-
-
-
-
-
+# 量化模型结构
+# conv1.weight
+# conv1.bias
+# conv1.scale
+# conv1.zero_point
+# conv2.weight
+# conv2.bias
+# conv2.scale
+# conv2.zero_point
+# conv3.weight
+# conv3.bias
+# conv3.scale
+# conv3.zero_point
+# linear1.scale
+# linear1.zero_point
+# linear1._packed_params.dtype
+# linear1._packed_params._packed_params
+# linear2.scale
+# linear2.zero_point
+# linear2._packed_params.dtype
+# linear2._packed_params._packed_params
+# quant.scale
+# quant.zero_poin

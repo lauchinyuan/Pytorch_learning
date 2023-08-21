@@ -119,8 +119,8 @@ for key in scale_dict:
 #     print(key)
 #     # print("{}: {}".format(key, scale_dict[key]))
 
-# 查看scale字典数据
-print("_________________________fix_____________________________")
-for key in fix_point_dict:
-    print(key)
-    print("{}: {}".format(key, fix_point_dict[key]))
+# # 查看fix_point字典数据
+# print("_________________________fix_____________________________")
+# for key in fix_point_dict:
+#     print(key)
+#     print("{}: {}".format(key, fix_point_dict[key]))

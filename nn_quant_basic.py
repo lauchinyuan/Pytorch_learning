@@ -101,3 +101,38 @@ def q_linear(w, b, img, name, in_features, out_features, n):
     scale_out = ((2**(-n) * fix_point_dict["{}.fix.scale".format(name)]) * out) + quant_dict[
         "{}.out.zero_point".format(name)]
     return scale_out.to(torch.uint8)
+
+class Conv2d_txt:
+    # 读取txt文件(权重、激活、bias),并进行量化后的卷积,其中n代表(s1*s2/s3)定点量化后的小数位
+    # 此class模拟了FPGA中的定点卷积运算
+    def __init__(self, name, in_channels, in_size_h, in_size_w, out_channels, kernel_size, n_img, n, padding):
+        self.name = name
+        self.in_channels = in_channels
+        self.in_size_w = in_size_w
+        self.in_size_h = in_size_h
+        self.out_channels = out_channels
+        self.kernel_size = kernel_size
+        self.n_img = n_img
+        self.n = n
+        self.padding = padding
+        # 加载量化后的权重、激活以及量化后的bias的文件路径
+        # 实例化此class时,应先运行nn_quant_export.py导出相关文件等
+        self.weight_path = "./txt/{}.weight_int8.txt".format(name)
+        self.img_path = "./txt/img_uint8.txt".format(name)
+        self.bias_path = "./txt/{}.bias_int32.txt".format(name)
+        # 初始化时暂时没有实际加载数据
+        self.b = None
+        self.w = None
+
+    def Conv2d(self):
+        # # 调用自定义的数据加载函数
+        self.b = read_bias(self.bias_path)
+        self.w = read_conv_weight(file_path=self.weight_path, in_channels=self.in_channels,
+                                  out_channels=self.out_channels, kernel_size=self.kernel_size)
+        img = read_img(file_path=self.img_path, img_channel=self.in_channels, img_size_h=self.in_size_h,
+                       img_size_w=self.in_size_w, n_img=self.n_img)
+        # 调用自定义的量化卷积函数
+        return q_conv(name=self.name, w=self.w, b=self.b, in_channels=self.in_channels, out_channels=self.out_channels,
+                      n=self.n, padding=self.padding, img=img, kernel_size=self.kernel_size)
+
+

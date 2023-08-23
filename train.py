@@ -12,7 +12,7 @@ from torch.utils.data import DataLoader
 train_data = torchvision.datasets.CIFAR10("./dataset", download=True, train=True,
                                           transform=torchvision.transforms.ToTensor())
 
-test_data = torchvision.datasets.CIFAR10("./dataset", download=False, train=False,
+test_data = torchvision.datasets.CIFAR10("./dataset", download=True, train=False,
                                           transform=torchvision.transforms.ToTensor())
 
 # 查看数据大小

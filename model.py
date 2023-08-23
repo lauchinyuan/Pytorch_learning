@@ -36,7 +36,6 @@ class cifar10_net(nn.Module):
             self.dequant = torch.quantization.DeQuantStub()
             self.dequant_res = None
 
-        # 中间结果,方便后续查看
         self.conv1_res = None
         self.maxpool1_res = None
         self.conv2_res = None

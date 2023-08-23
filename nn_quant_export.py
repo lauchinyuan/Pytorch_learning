@@ -24,8 +24,8 @@ for key in state_dict:
         bias_dict[key] = state_dict[key].detach()
     if "weight" in key:  # 提取量化后权重到txt文件,文件保存为1列,
         # 保存量化信息(scale、zero_point)到字典
-        quant_dict[key+".scale"] = state_dict[key].q_scale()
-        quant_dict[key+".zero_point"] = state_dict[key].q_zero_point()
+        quant_dict[key + ".scale"] = state_dict[key].q_scale()
+        quant_dict[key + ".zero_point"] = state_dict[key].q_zero_point()
         weight_int = state_dict[key].int_repr()
         weight_int = torch.reshape(weight_int, (-1, 1))
         # 转成uint8是因为np.savetxt只支持无符号16进制保存,实际上二进制值并不改变
@@ -67,13 +67,16 @@ nn_op_order = ["quant", "conv1", "conv2", "conv3", "linear1", "linear2"]
 # 实际上实现了以下key的更名：
 # quant.out.scale --> conv1.in.scale
 # conv1.out.scale --> conv2.in.scale
-# -----------------------------
+# -----------------------------etc----
 # previous_layer.out.scale --> next_layer.in.scale
+# zero_point同理
 scale_dict = {}
+zero_point_dict = {}
 i = 1
 for op in nn_op_order:
     if op != nn_op_order[-1]:
-        scale_dict[nn_op_order[i]+".in.scale"] = quant_dict[op+".out.scale"]
+        scale_dict[nn_op_order[i] + ".in.scale"] = quant_dict[op + ".out.scale"]
+        zero_point_dict[nn_op_order[i] + ".in.zero_point"] = quant_dict[op + ".out.zero_point"]
         i = i + 1
 
 # 依据scale字典对bias(float32)进行量化,并保存至txt文件,以便FPGA调用
@@ -83,44 +86,51 @@ for key in bias_dict:
     s2 = quant_dict[key.replace(".bias", ".weight.scale")]  # 自身op权重weight的scale
 
     # 量化
-    b_q = torch.quantize_per_tensor(b, scale=s1*s2, zero_point=0, dtype=torch.qint32)
+    b_q = torch.quantize_per_tensor(b, scale=s1 * s2, zero_point=0, dtype=torch.qint32)
     b_q_int = b_q.int_repr().numpy().astype("uint32")
 
     # 保存到txt
-    np.savetxt("./txt/"+key+"_int32.txt", b_q_int, fmt="%08x")
+    np.savetxt("./txt/" + key + "_int32.txt", b_q_int, fmt="%08x")
 
-# 依据scale字典, 计算[s1(in.scale)*s2(weight.scale)]/s3(out.scale)经过16位定点量化后的值,然后保存到字典
+# 依据scale字典, 计算[s1(in.scale)*s2(weight.scale)]/s3(out.scale)经过n位定点量化后的值,然后保存到字典
 fix_point_dict = {}
 n = 16
 for key in scale_dict:
-    print(key)
+    # print(key)
     s1 = scale_dict[key]
     s2 = quant_dict[key.replace("in.scale", "weight.scale")]
     s3 = quant_dict[key.replace("in.scale", "out.scale")]
-    M = s1*s2/s3
+    M = s1 * s2 / s3
     M_int = int(M * 2**n)  # 定点量化后的值
     fix_point_dict[key.replace(".in", ".fix")] = M_int
 
-# # # 查看各层量化参数
+
+# 逐条查看字典值
+def view_dict(dict):
+    for key in dict:
+        print("{}: {}".format(key, dict[key]))
+
+
+# # 查看各层量化参数
 # print("_________________________quant_____________________________")
-# for key in quant_dict:
-#     print(key)
-#     # print("{}: {}".format(key, quant_dict[key]))
+# view_dict(quant_dict)
 #
 # # 查看bias字典数据
 # print("_________________________bias_____________________________")
-# for key in bias_dict:
-#     print(key)
-#     # print("{}: {}".format(key, bias_dict[key]))
+# view_dict(bias_dict)
 #
 # # 查看scale字典数据
 # print("_________________________scale_____________________________")
-# for key in scale_dict:
-#     print(key)
-#     # print("{}: {}".format(key, scale_dict[key]))
-
-# # 查看fix_point字典数据
+# view_dict(scale_dict)
+#
+# 查看fix_point字典数据
 # print("_________________________fix_____________________________")
-# for key in fix_point_dict:
-#     print(key)
-#     print("{}: {}".format(key, fix_point_dict[key]))
+# view_dict(fix_point_dict)
+#
+# print("__________________________zero___________________________")
+# view_dict(zero_point_dict)
+
+# for key in quant_dict:
+#     if "linear1.weight" in key:
+#         print("{}:{}".format(key, quant_dict[key]))
+
